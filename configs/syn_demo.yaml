@@ -1,0 +1,19 @@
+input_mat: data/sample/DDAE_SYN.mat
+input_key: dn
+target_mat: data/sample/DDAE_SYN.mat
+target_key: d
+
+out_dir: runs
+win: 256
+stride: 128
+patch_mode: trace
+
+norm: global_max
+model_type: dense
+dense_widths: [512, 256, 128]
+
+lr: 0.001
+batch_size: 64
+epochs: 50
+val_split: 0.1
+patience: 10

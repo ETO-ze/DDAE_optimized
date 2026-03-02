@@ -1,0 +1,10 @@
+input_mat: data/sample/NEWREAL3_1.mat
+input_key: dn
+
+out_dir: runs
+win: 512
+stride: 512
+patch_mode: trace
+
+norm: global_max
+batch_size: 128

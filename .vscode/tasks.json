@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Train (synthetic)",
+      "type": "shell",
+      "command": "python -m ddae_seismic.scripts.train_syn --config configs/syn_demo.yaml",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Train (field)",
+      "type": "shell",
+      "command": "python -m ddae_seismic.scripts.train_field --config configs/field_demo.yaml",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Infer (field sample)",
+      "type": "shell",
+      "command": "python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model runs/field/latest/best.keras",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}

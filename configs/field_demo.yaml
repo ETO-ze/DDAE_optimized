@@ -1,0 +1,29 @@
+input_mat: data/sample/NEWREAL3_1.mat
+input_key: dn1
+
+out_dir: runs
+win: 512
+stride: 512
+patch_mode: trace
+
+# dn1 is already normalized in the sample mat (dn1 = dn / ma)
+norm: none
+
+model_type: dense
+dense_widths: [512, 256, 128]
+
+# transfer learning: fill this after you have a .keras model from syn stage
+pretrained_model: runs/syn/latest/best.keras
+
+lr: 0.001
+batch_size: 128
+epochs: 300
+patience: 20
+
+# unsupervised loss
+corr_target: 1.0
+corr_residual: 0.0
+w_target: 1.0
+w_residual: 1.0
+w_mse: 0.001
+corr_eps: 1.0e-8
