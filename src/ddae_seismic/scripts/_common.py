@@ -6,8 +6,16 @@ from datetime import datetime
 
 def make_run_dir(root: str, tag: str) -> Path:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    out = Path(root) / tag / ts
-    out.mkdir(parents=True, exist_ok=False)
+    parent = Path(root) / tag
+    suffix = 0
+    while True:
+        out = parent / (ts if suffix == 0 else f"{ts}_{suffix}")
+        try:
+            out.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            # Some Windows clocks repeat even with microseconds; never reuse a run.
+            suffix += 1
     # The text pointer is authoritative even when a legacy 'latest' folder exists.
     (out.parent / "LATEST.txt").write_text(out.name + "\n", encoding="utf-8")
     latest = out.parent / "latest"

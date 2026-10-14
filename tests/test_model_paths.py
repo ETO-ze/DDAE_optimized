@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from pathlib import Path
 import tempfile
 import unittest
@@ -44,8 +45,10 @@ class ModelPathTests(unittest.TestCase):
         self.assertTrue(old.is_file())
 
     def test_successive_runs_update_pointer(self):
-        first = make_run_dir("runs", "syn")
-        second = make_run_dir("runs", "syn")
+        with patch("ddae_seismic.scripts._common.datetime") as clock:
+            clock.now.return_value = datetime(2026, 10, 14, 7, 54, 57)
+            first = make_run_dir("runs", "syn")
+            second = make_run_dir("runs", "syn")
         self.assertNotEqual(first, second)
         model = self.save_model(second / "best.keras")
         self.assertEqual(resolve_model_path("runs/syn/latest/best.keras"), model.resolve())
