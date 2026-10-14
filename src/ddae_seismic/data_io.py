@@ -7,7 +7,7 @@ from typing import Dict, Tuple, Optional
 import numpy as np
 import scipy.io as sio
 
-from .utils.patching import extract_windows_1d, overlap_add_1d
+from .utils.patching import extract_windows_1d, overlap_add_1d, window_starts
 
 @dataclass
 class NormState:
@@ -52,6 +52,13 @@ def normalize(x: np.ndarray, mode: str = "global_max", eps: float = 1e-8) -> Tup
 
     raise ValueError(f"Unknown norm mode: {mode}")
 
+def prepare_time_traces(
+    x: np.ndarray, mode: str = "global_max", eps: float = 1e-8
+) -> Tuple[np.ndarray, NormState]:
+    """Orient time/trace axes before normalization in both training and inference."""
+    return normalize(_ensure_2d_time_trace(x), mode=mode, eps=eps)
+
+
 def denormalize(x: np.ndarray, state: NormState) -> np.ndarray:
     if state.mode == "none" or state.scale is None:
         return x
@@ -72,7 +79,7 @@ def to_training_pairs(
 
     patch_mode:
       - 'trace': sliding window along time for each trace (recommended)
-      - 'flatten': mimic original notebook: flatten whole matrix then chunk
+      - 'flatten': trace-major chunks; edge-pad the last chunk (stride is unused)
     """
     noisy = _ensure_2d_time_trace(noisy)
     if clean is not None:
@@ -86,14 +93,17 @@ def to_training_pairs(
         return X, Y
 
     if patch_mode == "flatten":
-        # Flatten in (ntr, nt) order like the notebook
-        n = noisy.size
-        n_win = n // win
-        X = noisy.T.reshape(-1)[: n_win * win].reshape(n_win, win)
-        if clean is None:
-            return X.astype(np.float32), None
-        Y = clean.T.reshape(-1)[: n_win * win].reshape(n_win, win)
-        return X.astype(np.float32), Y.astype(np.float32)
+        # Preserve the notebook's trace-major, non-overlapping chunk order.
+        # Pad rather than silently discard a partial final chunk.
+        if win <= 0 or noisy.size == 0:
+            raise ValueError("win and input size must be > 0")
+        padding = (-noisy.size) % win
+
+        def chunk(x: np.ndarray) -> np.ndarray:
+            flat = np.pad(x.T.reshape(-1), (0, padding), mode="edge")
+            return flat.reshape(-1, win).astype(np.float32, copy=False)
+
+        return chunk(noisy), chunk(clean) if clean is not None else None
 
     raise ValueError(f"Unknown patch_mode: {patch_mode}")
 
@@ -105,14 +115,22 @@ def reconstruct_from_windows(
     stride: int,
 ) -> np.ndarray:
     """Inverse of extract_windows_1d for patch_mode='trace'."""
-    # windows correspond to traces sequentially: trace0 windows, trace1 windows, ...
-    out = np.zeros((nt, ntr), dtype=np.float32)
-    idx = 0
+    n_win = len(window_starts(nt, win, stride))
+    if ntr <= 0 or windows.shape != (ntr * n_win, win):
+        raise ValueError(f"Expected windows shape {(ntr * n_win, win)}, got {windows.shape}")
+    out = np.empty((nt, ntr), dtype=np.float32)
     for tr in range(ntr):
-        n_win = 1 + max(0, (nt - win) // stride)
-        w = windows[idx : idx + n_win]  # (n_win, win)
-        idx += n_win
-        out[:, tr] = overlap_add_1d(w, n=nt, win=win, stride=stride)
-    if idx != windows.shape[0]:
-        raise RuntimeError(f"Window count mismatch: used {idx} / total {windows.shape[0]}")
+        out[:, tr] = overlap_add_1d(
+            windows[tr * n_win:(tr + 1) * n_win], n=nt, win=win, stride=stride
+        )
     return out
+
+
+def reconstruct_flattened(windows: np.ndarray, nt: int, ntr: int, win: int) -> np.ndarray:
+    """Invert flatten-mode chunking, removing only the final padding samples."""
+    if nt <= 0 or ntr <= 0 or win <= 0:
+        raise ValueError("nt, ntr and win must be > 0")
+    count = (nt * ntr + win - 1) // win
+    if windows.shape != (count, win):
+        raise ValueError(f"Expected windows shape {(count, win)}, got {windows.shape}")
+    return windows.reshape(-1)[:nt * ntr].reshape(ntr, nt).T.astype(np.float32, copy=False)

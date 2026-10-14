@@ -113,16 +113,15 @@ Stage‑2 会先加载 Stage‑1 的 `.keras` 作为 `pretrained_model`，并在
 默认是：
 - `pretrained_model: runs/syn/latest/best.keras`
 
-Windows 上如果没有 symlink 权限，`runs/syn/latest` 可能不存在（见“故障排查 A”）。
+Windows 上即使没有 symlink 权限，也会自动读取 `runs/syn/LATEST.txt`；无需手工复制模型。
 
 ---
 
 ### 3.3 推理（infer）：输出 `.mat`（含 denoised + residual）
-Stage‑2 成功后，推荐用 `LATEST.txt` 自动定位模型：
+Stage‑2 成功后，直接使用 `latest` 别名；程序会自动读取 `LATEST.txt`：
 
 ```powershell
-$fld = Get-Content runs\field\LATEST.txt
-python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model "$fld\best.keras"
+python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model runs/field/latest/best.keras
 ```
 
 输出通常在：
@@ -138,29 +137,14 @@ python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model "
 ## 4. 故障排查（结合你这次真实报错整理）
 
 ### A) `ValueError: File not found: runs/syn/latest/best.keras`
-**原因：Windows 未启用 symlink（开发者模式/权限），脚本 fallback 写了 `runs/syn/LATEST.txt`，但不会自动创建 `runs/syn/latest/`。**
+当前版本的 Stage‑2 和推理均支持 `LATEST.txt` 回退，不需要启用 Windows 开发者模式，也无需手工复制模型。
 
-**方案 1（推荐）：按 LATEST.txt 改配置或复制模型**
-执行：
+如果仍然找不到模型，请确认前一个训练阶段已成功生成 `best.keras`，并检查对应的 `LATEST.txt`。
+新指针保存相对于 `LATEST.txt` 所在目录的运行目录名；旧的绝对路径及相对于工作目录的路径也兼容。
+指针指向缺失模型时会明确报错，不会静默使用旧的 `latest` 文件夹。
 
-```powershell
-New-Item -ItemType Directory -Force runs\syn\latest | Out-Null
-$syn = Get-Content runs\syn\LATEST.txt
-Copy-Item "$syn\best.keras" runs\syn\latest\best.keras -Force
-```
-
-然后再跑 Stage‑2。
-
-**方案 2：直接改 `configs/field_demo.yaml`**
-把：
-- `pretrained_model: runs/syn/latest/best.keras`
-
-改为：
-- `pretrained_model: runs/syn/YYYYMMDD_HHMMSS/best.keras`（用实际路径）
-
-**方案 3：启用 Windows 开发者模式（长期方案）**
-Settings → Privacy & security → For developers → Developer Mode = On  
-之后 symlink 更容易成功。
+也可以把配置或 `--model` 改为实际的时间戳路径，例如：
+`runs/syn/YYYYMMDD_HHMMSS_microseconds/best.keras`。
 
 ---
 
@@ -246,9 +230,10 @@ where.exe python
 ## 6. 针对本项目的优化建议（基于你这次真实运行暴露的问题）
 
 ### 6.1 可靠性/易用性（优先）
-1) **修复 latest 指针机制（推荐在代码层改）**
-   - 目前 symlink 失败只写 `LATEST.txt`，但默认配置依赖 `runs/*/latest/`，会导致“找不到 best.keras”。
-   - 建议改为：symlink 失败时自动创建 `runs/tag/latest/` 并复制/硬链接 `best.keras`，或自动回退读取 `LATEST.txt`。
+1) **latest 指针机制已修复**
+   - symlink 使用相对于其父目录的目标，避免重复拼接 `runs/tag`。
+   - 始终写入 `LATEST.txt`；Stage‑2 和推理统一解析指针。
+   - 指针解析、Windows symlink 失败回退及旧格式兼容均有回归测试。
 
 2) **配置解析强制类型转换**
    - 对 `corr_eps / lr / norm_eps` 等字段在加载时 `float(...)`，彻底规避 YAML “1e-8 字符串”坑。
@@ -285,12 +270,8 @@ jupyter notebook
 python -m ddae_seismic.scripts.train_syn --config configs/syn_demo.yaml
 ```
 
-### 修复 syn latest（Windows）
-```powershell
-New-Item -ItemType Directory -Force runs\syn\latest | Out-Null
-$syn = Get-Content runs\syn\LATEST.txt
-Copy-Item "$syn\best.keras" runs\syn\latest\best.keras -Force
-```
+### syn latest（Windows）
+当前版本自动解析 `LATEST.txt`，无需额外命令。只有确认训练已完成后再运行 Stage‑2。
 
 ### Stage‑2
 ```powershell
@@ -299,8 +280,7 @@ python -m ddae_seismic.scripts.train_field --config configs/field_demo.yaml
 
 ### Infer（自动取最新 field 模型）
 ```powershell
-$fld = Get-Content runs\field\LATEST.txt
-python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model "$fld\best.keras"
+python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model runs/field/latest/best.keras
 ```
 
 ---
@@ -310,4 +290,5 @@ python -m ddae_seismic.scripts.infer --config configs/infer_field.yaml --model "
 - `input_mat: path/to/your.mat`
 - `input_key: your_key`
 - `win/stride` 按你的采样率与波形周期选即可。
+
 
