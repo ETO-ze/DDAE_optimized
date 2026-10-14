@@ -6,11 +6,11 @@ import numpy as np
 import tensorflow as tf
 
 from ..config import load_config, save_effective_config, RunConfig
-from ..data_io import load_mat, normalize, to_training_pairs
+from ..data_io import load_mat, prepare_time_traces, to_training_pairs
 from ..models import build_dense_dae, build_conv1d_dae, transfer_compatible_weights
 from ..losses import CorrelationLossConfig, make_correlation_denoise_loss
 from ..utils.seed import set_seed
-from ._common import make_run_dir
+from ._common import make_run_dir, resolve_model_path
 
 def _build_model(cfg: RunConfig) -> tf.keras.Model:
     if cfg.model_type == "dense":
@@ -38,7 +38,7 @@ def main() -> None:
 
     mat = load_mat(cfg.input_mat)
     noisy = mat[cfg.input_key]
-    noisy, nstate = normalize(noisy, mode=cfg.norm, eps=cfg.norm_eps)
+    noisy, nstate = prepare_time_traces(noisy, mode=cfg.norm, eps=cfg.norm_eps)
 
     X, _ = to_training_pairs(noisy, clean=None, win=cfg.win, stride=cfg.stride, patch_mode=cfg.patch_mode)
     Y = X  # auto-encoding target (loss enforces denoising)
@@ -48,7 +48,7 @@ def main() -> None:
 
     # transfer weights
     if cfg.pretrained_model:
-        src = tf.keras.models.load_model(cfg.pretrained_model, compile=False)
+        src = tf.keras.models.load_model(resolve_model_path(cfg.pretrained_model), compile=False)
         transfer_compatible_weights(src, model, verbose=True)
 
     if cfg.freeze_encoder:
@@ -97,3 +97,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

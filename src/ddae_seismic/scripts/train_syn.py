@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from ..config import load_config, save_effective_config, RunConfig
-from ..data_io import load_mat, normalize, to_training_pairs
+from ..data_io import load_mat, prepare_time_traces, to_training_pairs
 from ..models import build_dense_dae, build_conv1d_dae
 from ..utils.seed import set_seed
 from ._common import make_run_dir
@@ -42,8 +42,8 @@ def main() -> None:
     mat2 = load_mat(cfg.target_mat)
     clean = mat2[cfg.target_key]
 
-    noisy, nstate = normalize(noisy, mode=cfg.norm, eps=cfg.norm_eps)
-    clean, _ = normalize(clean, mode=cfg.norm, eps=cfg.norm_eps)  # use same scaling style
+    noisy, nstate = prepare_time_traces(noisy, mode=cfg.norm, eps=cfg.norm_eps)
+    clean, _ = prepare_time_traces(clean, mode=cfg.norm, eps=cfg.norm_eps)  # use same scaling style
 
     X, Y = to_training_pairs(noisy, clean, win=cfg.win, stride=cfg.stride, patch_mode=cfg.patch_mode)
     assert Y is not None
@@ -82,3 +82,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
